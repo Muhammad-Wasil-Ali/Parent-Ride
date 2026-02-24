@@ -43,7 +43,7 @@ export const userRegisterController = async (req, res) => {
     console.error("Register Error:", error); // important for debugging
     return res.status(500).send({
       success: false,
-      message: "Internal server error",
+      message: "Internal server erro",
       error: error.message,
     });
   }
