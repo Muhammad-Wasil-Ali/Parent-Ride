@@ -1,50 +1,89 @@
 import User from "../models/userModel.js";
+import { userLoginShema, userRegisterSchema } from "../services/userSchema.js";
 import { hashedPassword } from "../utils/passwordHashing.js";
+import { sendResponse } from "../utils/responseHandler.js";
 
 export const userRegisterController = async (req, res) => {
   try {
-    const { name, email, password, phone, role } = req.body;
+    // manual validation for beginners
+    // if (!name || !email || !password || !phone || !role) {
+    //   return sendResponse(res, 400, false, "All fields are required", null);
+    // }
 
-    if (!name || !email || !password || !phone || !role) {
-      return res.status(400).send({
+    // zod validation for scalable apps
+
+    const result = userRegisterSchema.safeParse(req.body);
+    if (!result.success) {
+      return sendResponse(res, {
+        statusCode: 400,
         success: false,
-        message: "All fields are required",
+        message: "Zod error",
+        error: result.error,
       });
     }
+    const { name, email, phone, password, role } = result.data;
+    const normalizeEmail = email.toLowerCase().trim();
+    const existingUser = await User.findOne({ email: normalizeEmail });
 
-    const existUser = await User.findOne({ email: email });
-
-    if (existUser) {
-      return res
-        .status(400)
-        .send({ success: false, message: "User already exists Please login" });
+    if (existingUser) {
+      return sendResponse(res, {
+        statusCode: 400,
+        success: false,
+        message: "User already exists",
+      });
     }
-
     const securePassword = await hashedPassword(password);
 
     const user = await User.create({
       name,
-      email,
-      password: hashedPassword,
+      email: normalizeEmail,
+      password: securePassword,
       role,
       phone,
     });
 
     if (!user) {
-      return res
-        .status(400)
-        .send({ success: false, message: "user not created" });
+      return sendResponse(res, {
+        statusCode: 400,
+        success: false,
+        message: "User not created",
+      });
     }
-
-    return res
-      .status(200)
-      .send({ success: true, message: "User created successfully", user });
+    const userResponse = {
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+    };
+    return sendResponse(res, {
+      statusCode: 201,
+      success: true,
+      message: "User registered successfully",
+      data: userResponse,
+    });
   } catch (error) {
     console.error("Register Error:", error); // important for debugging
-    return res.status(500).send({
+    return sendResponse(res, {
+      statusCode: 500,
       success: false,
-      message: "Internal server erro",
-      error: error.message,
+      message: "Internal server error",
+      error: error,
     });
+  }
+};
+
+//login route
+
+export const loginUserController = async (req, res) => {
+  try {
+    const result = userLoginShema.safeParse(req.body);
+
+    if (!result.success) {
+      return sendResponse(res, 400, false, "Invalid fields", error);
+    }
+  } catch (error) {
+    console.error("Login error", error);
+
+    return sendResponse(res, 500, false, "Internal Server Error", error);
   }
 };
