@@ -1,8 +1,8 @@
 import User from "../models/userModel.js";
 import { userLoginShema, userRegisterSchema } from "../services/userSchema.js";
-import { hashedPassword } from "../utils/passwordHashing.js";
+import { hashedPassword, verifyPassword } from "../utils/passwordHashing.js";
 import { sendResponse } from "../utils/responseHandler.js";
-
+import jwt from "jsonwebtoken";
 export const userRegisterController = async (req, res) => {
   try {
     // manual validation for beginners
@@ -79,11 +79,110 @@ export const loginUserController = async (req, res) => {
     const result = userLoginShema.safeParse(req.body);
 
     if (!result.success) {
-      return sendResponse(res, 400, false, "Invalid fields", error);
+      return sendResponse(res, {
+        statusCode: 400,
+        success: false,
+        message: "zod error",
+        error: result.error,
+      });
     }
+
+    const { email, password } = result.data;
+    const normalizeEmail = email.toLowerCase().trim();
+
+    const user = await User.findOne({ email: normalizeEmail });
+
+    if (!userRegisterController) {
+      return sendResponse(res, {
+        statusCode: 400,
+        success: false,
+        message: "User not exist Please signup",
+      });
+    }
+
+    const comparePassword = verifyPassword(password, user.password);
+
+    if (!comparePassword) {
+      return sendResponse(res, {
+        statusCode: 400,
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    const token = jwt.sign(
+      { id: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" },
+    );
+
+    if (!token) {
+      return sendResponse(res, {
+        statusCode: 400,
+        success: false,
+        message: "Token not created",
+      });
+    }
+    const userData = {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    };
+    return sendResponse(res, {
+      statusCode: 201,
+      success: true,
+      message: "Login successful",
+      data: { userData, token },
+    });
   } catch (error) {
     console.error("Login error", error);
 
-    return sendResponse(res, 500, false, "Internal Server Error", error);
+    return sendResponse(res, {
+      statusCod: 500,
+      success: false,
+      message: "Internal Server Error",
+      error: error,
+    });
+  }
+};
+
+export const getByIdUserController = async (req, res) => {
+  try {
+    const { id } = req.user;
+
+    if (!id) {
+      return sendResponse(res, {
+        statusCode: 400,
+        success: false,
+        message: "Invalid or missing id",
+      });
+    }
+
+    const user = await User.findById(id).select("-password");
+
+    if (!user) {
+      return sendResponse(res, {
+        statusCode: 400,
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return sendResponse(res, {
+      statusCode: 201,
+      success: true,
+      message: "User get successfully",
+      data: user,
+    });
+  } catch (error) {
+    console.error("Login error", error);
+
+    return sendResponse(res, {
+      statusCod: 500,
+      success: false,
+      message: "Internal Server Error",
+      error: error,
+    });
   }
 };
